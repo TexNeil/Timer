@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Two Person Timer</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: sans-serif;
+      background: #333;
+      color: #fff;
+    }
+    .container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    .player {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 5em;
+      user-select: none;
+      transition: color 0.2s ease;
+    }
+    .player.top {
+      background-color: #444;
+      transform: rotate(180deg);
+    }
+    .player.bottom {
+      background-color: #555;
+    }
+    /* Pause and Reset buttons */
+    #pauseButton, #resetButton {
+      position: absolute;
+      top: 10px;
+      padding: 10px 20px;
+      font-size: 1em;
+      z-index: 1000;
+      background-color: #666;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+    }
+    #pauseButton {
+      right: 10px;
+    }
+    #resetButton {
+      right: 100px;
+      display: none;
+    }
+    /* Swap graphic overlay */
+    #swapGraphic {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 3em;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .swap-active {
+      animation: swapEffect 0.5s ease-out;
+    }
+    @keyframes swapEffect {
+      0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+    }
+  </style>
+</head>
+<body>
+  <button id="pauseButton">Pause</button>
+  <button id="resetButton">Reset</button>
+  <div id="swapGraphic">🔄</div>
+  <div class="container" id="container">
+    <div class="player top" id="player2">03:00</div>
+    <div class="player bottom" id="player1">03:00</div>
+  </div>
+
+  <script>
+    // Initial times in seconds (3 minutes each)
+    let time1 = 180, time2 = 180;
+    // activePlayer: null (not started), 1 (player1 active), or 2 (player2 active)
+    let activePlayer = null;
+    let interval = null;
+    let paused = false;
+    // For the 30-second beep timer
+    let elapsedTime = 0;
+    let nextBeepTime = 30;
+    
+    const display1 = document.getElementById("player1");
+    const display2 = document.getElementById("player2");
+    const pauseButton = document.getElementById("pauseButton");
+    const resetButton = document.getElementById("resetButton");
+    const swapGraphic = document.getElementById("swapGraphic");
+    
+    // Format seconds into mm:ss
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+    }
+    
+    // Return color based on time thresholds.
+    function getColor(time) {
+      if (time > 240) return "green";       // above 4 minutes
+      else if (time < 30) return "red";       // below 30 seconds
+      else if (time < 60) return "orange";    // below 1 minute
+      else return "#fff";                    // default white
+    }
+    
+    // Update both displays and their font colors
+    function updateDisplay() {
+      display1.textContent = formatTime(time1);
+      display2.textContent = formatTime(time2);
+      display1.style.color = getColor(time1);
+      display2.style.color = getColor(time2);
+    }
+    
+    // Beep sound for 30-second interval using Web Audio API
+    function beep() {
+      const context = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = context.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 600;
+      oscillator.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.1);
+    }
+    
+    // Swap sound: a friendly chime effect
+    function playSwapSound() {
+      const context = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(context.destination);
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(300, context.currentTime);
+      oscillator.frequency.linearRampToValueAtTime(500, context.currentTime + 0.2);
+      gainNode.gain.setValueAtTime(0.5, context.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0, context.currentTime + 0.3);
+      oscillator.start(context.currentTime);
+      oscillator.stop(context.currentTime + 0.3);
+    }
+    
+    // Show a brief swap graphic overlay
+    function showSwapGraphic() {
+      swapGraphic.classList.add("swap-active");
+      swapGraphic.addEventListener("animationend", function() {
+        swapGraphic.classList.remove("swap-active");
+      }, { once: true });
+    }
+    
+    // Tick function: transfers time between players and triggers 30-sec beeps.
+    function tick() {
+      const delta = 0.1; // update interval in seconds
+      elapsedTime += delta;
+      if (elapsedTime >= nextBeepTime) {
+        beep();
+        nextBeepTime += 30;
+      }
+      
+      if (activePlayer === 1) {
+        time1 -= delta;
+        time2 += delta;
+        if (time1 <= 0) {
+          time1 = 0;
+          clearInterval(interval);
+          activePlayer = null;
+          alert("Player 1 ran out of time!");
+        }
+      } else if (activePlayer === 2) {
+        time2 -= delta;
+        time1 += delta;
+        if (time2 <= 0) {
+          time2 = 0;
+          clearInterval(interval);
+          activePlayer = null;
+          alert("Player 2 ran out of time!");
+        }
+      }
+      updateDisplay();
+    }
+    
+    // Tapping anywhere on the container toggles (or starts) the timer
+    document.getElementById("container").addEventListener("click", function() {
+      if (paused) return; // ignore taps while paused
+      if (activePlayer === null) {
+        // Start with player 1
+        activePlayer = 1;
+        interval = setInterval(tick, 100);
+      } else {
+        // Swap active player and trigger sound & graphic
+        activePlayer = (activePlayer === 1) ? 2 : 1;
+        playSwapSound();
+        showSwapGraphic();
+      }
+    });
+    
+    // Pause/Resume button event
+    pauseButton.addEventListener("click", function(e) {
+      e.stopPropagation(); // prevent container tap
+      if (!paused) {
+        paused = true;
+        clearInterval(interval);
+        interval = null;
+        pauseButton.textContent = "Resume";
+        resetButton.style.display = "block";
+      } else {
+        paused = false;
+        if (activePlayer !== null) {
+          interval = setInterval(tick, 100);
+        }
+        pauseButton.textContent = "Pause";
+        resetButton.style.display = "none";
+      }
+    });
+    
+    // Reset button event: resets timer state
+    resetButton.addEventListener("click", function(e) {
+      e.stopPropagation();
+      clearInterval(interval);
+      interval = null;
+      paused = false;
+      activePlayer = null;
+      time1 = 180;
+      time2 = 180;
+      elapsedTime = 0;
+      nextBeepTime = 30;
+      pauseButton.textContent = "Pause";
+      resetButton.style.display = "none";
+      updateDisplay();
+    });
+    
+    updateDisplay();
+  </script>
+</body>
+</html>

@@ -11,7 +11,7 @@
       height: 100%;
       font-family: sans-serif;
     }
-    /* The container for the two timers */
+    /* Container holding both players’ areas */
     .container {
       height: 100%;
       display: flex;
@@ -19,28 +19,42 @@
     }
     /* Each player's area */
     .player {
-      position: relative; /* so overlays can be placed absolutely */
+      position: relative;
       flex: 1;
       display: flex;
       justify-content: center;
       align-items: center;
-      font-size: 5em;
+      background: transparent;
       user-select: none;
       transition: color 0.2s ease;
       text-shadow: 1px 1px 2px #000;
-      background: transparent;
+    }
+    /* Main timer text inside each player */
+    .main-timer {
+      font-size: 5em;
     }
     /* The top player's area is rotated 180° */
     .player.top {
       transform: rotate(180deg);
     }
-    /* Opponent time overlay in bottom-right corner of each player's area */
+    /* Opponent time overlay in bottom-right */
     .opponent-time {
       position: absolute;
       bottom: 5px;
       right: 5px;
       font-size: 0.3em;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0,0,0,0.5);
+      padding: 2px 4px;
+      border-radius: 3px;
+      color: #fff;
+    }
+    /* Player info overlay (name and score) in bottom-left */
+    .player-info {
+      position: absolute;
+      bottom: 5px;
+      left: 5px;
+      font-size: 0.3em;
+      background: rgba(0,0,0,0.5);
       padding: 2px 4px;
       border-radius: 3px;
       color: #fff;
@@ -65,7 +79,7 @@
       top: 55%;
       display: none;
     }
-    /* The swap graphic overlay for the "ding" effect */
+    /* Swap graphic overlay for the bell “ding” effect */
     #swapGraphic {
       position: fixed;
       top: 50%;
@@ -82,7 +96,7 @@
       0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
       100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
     }
-    /* Starting player selector: placed at the 50% vertical line, near the left edge */
+    /* Starting player selector – positioned on the center vertical line */
     #startSelector {
       position: absolute;
       top: 50%;
@@ -93,15 +107,15 @@
       border-radius: 5px;
       color: #fff;
       font-size: 0.9em;
-      display: none; /* shown when paused */
-      z-index: 2000; /* ensure above other elements */
+      display: none;
+      z-index: 2000;
     }
     #startSelector button {
       margin: 0 3px;
       padding: 3px 8px;
       font-size: 0.9em;
     }
-    /* Settings panel (for names, scores, and time per side) */
+    /* Settings panel for names, scores, and time per side */
     #settingsPanel {
       position: absolute;
       left: 50%;
@@ -112,8 +126,8 @@
       border-radius: 5px;
       color: #fff;
       font-size: 1em;
-      display: none; /* shown when paused */
-      z-index: 2000; /* ensure above container for clickability */
+      display: none;
+      z-index: 2000;
     }
     #settingsPanel div {
       margin-bottom: 5px;
@@ -127,20 +141,20 @@
   </style>
 </head>
 <body>
-  <!-- Middle-right buttons -->
+  <!-- Middle-right control buttons -->
   <button id="pauseButton">Resume</button>
   <button id="resetButton">Reset</button>
-
-  <!-- Swap graphic for the bell emoji animation -->
+  
+  <!-- Swap graphic overlay -->
   <div id="swapGraphic">🔔</div>
-
-  <!-- Start player selector on the center line -->
+  
+  <!-- Starting player selector -->
   <div id="startSelector">
     Start:
     <button id="startPlayer1">Player 1</button>
     <button id="startPlayer2">Player 2</button>
   </div>
-
+  
   <!-- Settings panel for names, scores, and time per side -->
   <div id="settingsPanel">
     <div>
@@ -165,33 +179,35 @@
       </label>
     </div>
   </div>
-
-  <!-- The main container for both players' timers -->
+  
+  <!-- Main container for the timers -->
   <div class="container" id="container">
-    <!-- Top player (player2) area -->
+    <!-- Top player (Player 2) area -->
     <div class="player top" id="player2">
-      03:00
+      <span class="main-timer">03:00</span>
       <div class="opponent-time" id="oppTime2">03:00</div>
+      <div class="player-info" id="info2">Player 2 | 0</div>
     </div>
-    <!-- Bottom player (player1) area -->
+    <!-- Bottom player (Player 1) area -->
     <div class="player bottom" id="player1">
-      03:00
+      <span class="main-timer">03:00</span>
       <div class="opponent-time" id="oppTime1">03:00</div>
+      <div class="player-info" id="info1">Player 1 | 0</div>
     </div>
   </div>
 
   <script>
-    // Utility: set and get cookies
+    // Utility functions for cookies
     function setCookie(cname, cvalue, exdays) {
       const d = new Date();
-      d.setTime(d.getTime() + (exdays*24*60*60*1000));
-      const expires = "expires="+ d.toUTCString();
+      d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
+      const expires = "expires=" + d.toUTCString();
       document.cookie = cname + "=" + encodeURIComponent(cvalue) + ";" + expires + ";path=/";
     }
     function getCookie(cname) {
       const name = cname + "=";
       const ca = document.cookie.split(';');
-      for(let i=0; i<ca.length; i++) {
+      for (let i = 0; i < ca.length; i++) {
         let c = ca[i].trim();
         if (c.indexOf(name) === 0) {
           return decodeURIComponent(c.substring(name.length, c.length));
@@ -200,37 +216,33 @@
       return "";
     }
 
-    // Retrieve stored player names or defaults
+    // Retrieve stored names or use defaults
     let storedPlayer1Name = getCookie("player1Name") || "Player 1";
     let storedPlayer2Name = getCookie("player2Name") || "Player 2";
 
-    // State variables
-    let time1 = 180, time2 = 180;   // default 180 seconds each
-    const totalTime = 360;          // sum always remains 360
-    let activePlayer = null;        // null (not started), 1, or 2
+    // Global state variables
+    let time1 = 180, time2 = 180;   // default time per side in seconds
+    const totalTime = 360;
+    let activePlayer = null;        // null if not started, otherwise 1 or 2
     let interval = null;
-    let paused = true;             // start paused
+    let paused = true;              // start paused so settings are editable
     let elapsedTime = 0;
     let nextBeepTime = 30;
-    let startingPlayer = 1;        // default start is Player 1
+    let startingPlayer = 1;         // default starting player
 
-    // Colors for the dynamic background
+    // Colors for dynamic background
     const colorPlayer1 = "#FF9A76";  // bottom
     const colorPlayer2 = "#76C7FF";  // top
 
-    // DOM references
+    // DOM element references
     const container = document.getElementById("container");
-    const display1 = document.getElementById("player1");
-    const display2 = document.getElementById("player2");
     const pauseButton = document.getElementById("pauseButton");
     const resetButton = document.getElementById("resetButton");
     const swapGraphic = document.getElementById("swapGraphic");
-    const oppTime1 = document.getElementById("oppTime1");
-    const oppTime2 = document.getElementById("oppTime2");
     const startSelector = document.getElementById("startSelector");
     const settingsPanel = document.getElementById("settingsPanel");
 
-    // Inputs
+    // Inputs from settings panel
     const player1NameInput = document.getElementById("player1Name");
     const player2NameInput = document.getElementById("player2Name");
     const player1ScoreInput = document.getElementById("player1Score");
@@ -239,7 +251,15 @@
     const startPlayer1Button = document.getElementById("startPlayer1");
     const startPlayer2Button = document.getElementById("startPlayer2");
 
-    // Initialize name inputs with stored or default values
+    // Overlays for player info in each area
+    const info1 = document.getElementById("info1");
+    const info2 = document.getElementById("info2");
+    
+    // Main timer spans for each player
+    const mainTimer1 = document.querySelector("#player1 .main-timer");
+    const mainTimer2 = document.querySelector("#player2 .main-timer");
+    
+    // Initialize name inputs with stored values
     player1NameInput.value = storedPlayer1Name;
     player2NameInput.value = storedPlayer2Name;
 
@@ -247,36 +267,42 @@
     function formatTime(sec) {
       const m = Math.floor(sec / 60);
       const s = Math.floor(sec % 60);
-      return (m < 10 ? "0"+m : m) + ":" + (s < 10 ? "0"+s : s);
+      return (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
     }
 
-    // Text color based on thresholds
+    // Choose text color based on thresholds
     function getColor(t) {
-      if (t > 240) return "green";   // above 4 min
-      else if (t < 30) return "red";   // below 30 s
-      else if (t < 60) return "orange"; // below 1 min
-      else return "#fff";            // default
+      if (t > 240) return "green";
+      else if (t < 30) return "red";
+      else if (t < 60) return "orange";
+      else return "#fff";
     }
 
-    // Update the timers, overlays, and background
+    // Update main timers, overlays, and background
     function updateDisplay() {
-      // Main timers
-      display1.firstChild.textContent = formatTime(time1);
-      display2.firstChild.textContent = formatTime(time2);
-      display1.style.color = getColor(time1);
-      display2.style.color = getColor(time2);
-
-      // Opponent overlays
-      oppTime1.textContent = formatTime(time2);
-      oppTime2.textContent = formatTime(time1);
-
-      // Background gradient (ratio from top color to bottom color)
+      // Update main timer texts
+      mainTimer1.textContent = formatTime(time1);
+      mainTimer2.textContent = formatTime(time2);
+      // Update text colors
+      mainTimer1.style.color = getColor(time1);
+      mainTimer2.style.color = getColor(time2);
+      // Update opponent overlays
+      document.getElementById("oppTime1").textContent = formatTime(time2);
+      document.getElementById("oppTime2").textContent = formatTime(time1);
+      // Update player info overlays (name and score)
+      let s1 = parseInt(player1ScoreInput.value, 10);
+      let s2 = parseInt(player2ScoreInput.value, 10);
+      if (isNaN(s1)) s1 = 0;
+      if (isNaN(s2)) s2 = 0;
+      info1.textContent = player1NameInput.value + " | " + s1;
+      info2.textContent = player2NameInput.value + " | " + s2;
+      // Update dynamic background gradient based on ratio of time
       const ratio = (time2 / (time1 + time2)) * 100;
       document.body.style.background =
         `linear-gradient(to bottom, ${colorPlayer2} 0%, ${colorPlayer2} ${ratio}%, ${colorPlayer1} ${ratio}%, ${colorPlayer1} 100%)`;
     }
 
-    // 30-second beep
+    // 30-second beep using Web Audio API
     function beep() {
       const context = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = context.createOscillator();
@@ -287,7 +313,7 @@
       oscillator.stop(context.currentTime + 0.1);
     }
 
-    // Bell-like swap "ding"
+    // Bell-like "ding" sound for swap
     function playSwapSound() {
       const context = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = context.createOscillator();
@@ -303,7 +329,7 @@
       oscillator.stop(context.currentTime + 0.5);
     }
 
-    // Show swap graphic
+    // Show swap graphic overlay
     function showSwapGraphic() {
       swapGraphic.classList.add("swap-active");
       swapGraphic.addEventListener("animationend", () => {
@@ -311,9 +337,9 @@
       }, { once: true });
     }
 
-    // Main ticking function
+    // Main ticking function for the timer
     function tick() {
-      const delta = 0.1; // update interval in seconds
+      const delta = 0.1;
       elapsedTime += delta;
       if (elapsedTime >= nextBeepTime) {
         beep();
@@ -341,27 +367,23 @@
       updateDisplay();
     }
 
-    // Container click toggles or starts the timer if not paused
-    container.addEventListener("click", function(e) {
-      // If paused, ignore clicks so we can edit fields
+    // Container click starts or swaps timer (ignored when paused)
+    container.addEventListener("click", function() {
       if (paused) return;
-      // If not started, set active player from the "startingPlayer" selection
       if (activePlayer === null) {
         activePlayer = startingPlayer;
         interval = setInterval(tick, 100);
       } else {
-        // Swap players
         activePlayer = (activePlayer === 1) ? 2 : 1;
         playSwapSound();
         showSwapGraphic();
       }
     });
 
-    // Pause/Resume button
+    // Pause/Resume button functionality
     pauseButton.addEventListener("click", function(e) {
       e.stopPropagation();
       if (!paused) {
-        // Pause
         paused = true;
         clearInterval(interval);
         interval = null;
@@ -370,24 +392,22 @@
         settingsPanel.style.display = "block";
         startSelector.style.display = "block";
       } else {
-        // Resume
         paused = false;
         pauseButton.textContent = "Pause";
         resetButton.style.display = "none";
         settingsPanel.style.display = "none";
         startSelector.style.display = "none";
-        // If the game hasn't started yet, set time from user input
+        // If game not started, apply time per side setting
         if (activePlayer === null) {
           applyTimePerSide();
         }
-        // If there's an active player or we just set it now
         if (activePlayer !== null) {
           interval = setInterval(tick, 100);
         }
       }
     });
 
-    // Reset button
+    // Reset button resets game state and shows panels
     resetButton.addEventListener("click", function(e) {
       e.stopPropagation();
       clearInterval(interval);
@@ -400,11 +420,11 @@
       resetButton.style.display = "block";
       settingsPanel.style.display = "block";
       startSelector.style.display = "block";
-      applyTimePerSide(); // apply any new time setting
+      applyTimePerSide();
       updateDisplay();
     });
 
-    // Apply the "time per side" setting
+    // Apply the "time per side" setting from input
     function applyTimePerSide() {
       let secs = parseInt(timePerSideInput.value, 10);
       if (isNaN(secs) || secs <= 0) secs = 180;
@@ -413,7 +433,7 @@
       updateDisplay();
     }
 
-    // Starting player selector
+    // Starting player selector events
     startPlayer1Button.addEventListener("click", function() {
       startingPlayer = 1;
       startPlayer1Button.style.fontWeight = "bold";
@@ -424,24 +444,28 @@
       startPlayer2Button.style.fontWeight = "bold";
       startPlayer1Button.style.fontWeight = "normal";
     });
-    // Default highlight is Player 1
     startPlayer1Button.style.fontWeight = "bold";
 
-    // Save names in cookies when changed
+    // Save player names in cookies when changed
     player1NameInput.addEventListener("change", function() {
       setCookie("player1Name", player1NameInput.value, 30);
+      updateDisplay();
     });
     player2NameInput.addEventListener("change", function() {
       setCookie("player2Name", player2NameInput.value, 30);
+      updateDisplay();
     });
+    // Also update display when scores change
+    player1ScoreInput.addEventListener("change", updateDisplay);
+    player2ScoreInput.addEventListener("change", updateDisplay);
 
-    // On first load, we’re paused, so show the panels:
+    // Start in paused state so settings are visible
     pauseButton.textContent = "Resume";
     resetButton.style.display = "none";
     settingsPanel.style.display = "block";
     startSelector.style.display = "block";
 
-    // Initial display
+    // Initial display update
     updateDisplay();
   </script>
 </body>

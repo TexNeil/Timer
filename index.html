@@ -10,7 +10,7 @@
       padding: 0;
       height: 100%;
       font-family: sans-serif;
-      /* The background is updated dynamically */
+      /* Background is set dynamically */
     }
     .container {
       height: 100%;
@@ -18,7 +18,7 @@
       flex-direction: column;
     }
     .player {
-      position: relative; /* so that overlays are positioned relative to each player area */
+      position: relative; /* for positioning overlays */
       flex: 1;
       display: flex;
       justify-content: center;
@@ -29,11 +29,11 @@
       text-shadow: 1px 1px 2px #000;
       background: transparent;
     }
-    /* The top player's area is rotated 180° */
+    /* Top player's area is rotated 180° */
     .player.top {
       transform: rotate(180deg);
     }
-    /* Opponent time overlay styling */
+    /* Opponent time overlay (already present on bottom right) */
     .opponent-time {
       position: absolute;
       bottom: 5px;
@@ -44,10 +44,11 @@
       border-radius: 3px;
       color: #fff;
     }
-    /* Pause and Reset buttons */
+    /* Pause/Resume and Reset buttons positioned in middle right */
     #pauseButton, #resetButton {
       position: absolute;
-      top: 10px;
+      right: 10px;
+      transform: translateY(-50%);
       padding: 10px 20px;
       font-size: 1em;
       z-index: 1000;
@@ -57,10 +58,10 @@
       border-radius: 5px;
     }
     #pauseButton {
-      right: 10px;
+      top: 45%;
     }
     #resetButton {
-      right: 100px;
+      top: 55%;
       display: none;
     }
     /* Swap graphic overlay */
@@ -80,19 +81,86 @@
       0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
       100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
     }
+    /* Starting player selector in bottom left */
+    #startSelector {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 10px;
+      border-radius: 5px;
+      display: none;
+      color: #fff;
+      font-size: 0.9em;
+    }
+    #startSelector button {
+      margin: 0 5px;
+      padding: 3px 8px;
+      font-size: 0.9em;
+    }
+    /* Settings panel for names and scores (shown when paused) */
+    #settingsPanel {
+      position: absolute;
+      left: 50%;
+      bottom: 10px;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+      color: #fff;
+      font-size: 1em;
+    }
+    #settingsPanel div {
+      margin-bottom: 5px;
+    }
+    #settingsPanel label {
+      margin-right: 10px;
+    }
+    #settingsPanel input {
+      margin-right: 10px;
+    }
   </style>
 </head>
 <body>
+  <!-- Control Buttons -->
   <button id="pauseButton">Pause</button>
   <button id="resetButton">Reset</button>
+  <!-- Swap graphic overlay -->
   <div id="swapGraphic">🔔</div>
+  <!-- Starting Player Selector (bottom left) -->
+  <div id="startSelector">
+    Start:&nbsp;
+    <button id="startPlayer1">Player 1</button> /
+    <button id="startPlayer2">Player 2</button>
+  </div>
+  <!-- Settings Panel for entering names and scores (shown when paused) -->
+  <div id="settingsPanel">
+    <div>
+      <label>Player 1 Name:
+        <input type="text" id="player1Name" value="Player 1">
+      </label>
+      <label>Score:
+        <input type="number" id="player1Score" value="0">
+      </label>
+    </div>
+    <div>
+      <label>Player 2 Name:
+        <input type="text" id="player2Name" value="Player 2">
+      </label>
+      <label>Score:
+        <input type="number" id="player2Score" value="0">
+      </label>
+    </div>
+  </div>
+  <!-- Main Timer Container -->
   <div class="container" id="container">
-    <!-- Top player area (player2) shows its own time plus opponent overlay showing player1's time -->
+    <!-- Top player (player 2) area -->
     <div class="player top" id="player2">
       03:00
       <div class="opponent-time" id="oppTime2">03:00</div>
     </div>
-    <!-- Bottom player area (player1) shows its own time plus opponent overlay showing player2's time -->
+    <!-- Bottom player (player 1) area -->
     <div class="player bottom" id="player1">
       03:00
       <div class="opponent-time" id="oppTime1">03:00</div>
@@ -100,29 +168,61 @@
   </div>
 
   <script>
-    // Total seconds per player (3 minutes each) and overall total seconds.
+    // Cookie functions for storing player names.
+    function setCookie(cname, cvalue, exdays) {
+      const d = new Date();
+      d.setTime(d.getTime() + (exdays*24*60*60*1000));
+      const expires = "expires="+ d.toUTCString();
+      document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+    }
+    function getCookie(cname) {
+      const name = cname + "=";
+      const ca = document.cookie.split(';');
+      for(let i = 0; i < ca.length; i++) {
+          let c = ca[i].trim();
+          if (c.indexOf(name) === 0) return c.substring(name.length, c.length);
+      }
+      return "";
+    }
+
+    // Load stored player names if they exist.
+    let player1Name = getCookie("player1Name") || "Player 1";
+    let player2Name = getCookie("player2Name") || "Player 2";
+    document.getElementById("player1Name").value = player1Name;
+    document.getElementById("player2Name").value = player2Name;
+
+    // Global game state variables.
     let time1 = 180, time2 = 180;
     const totalTime = 360;
-    // activePlayer: null (not started), 1 (player1 active), or 2 (player2 active)
-    let activePlayer = null;
+    let activePlayer = null; // null, 1, or 2.
     let interval = null;
     let paused = false;
-    // For the 30-second beep timer.
     let elapsedTime = 0;
     let nextBeepTime = 30;
-    
-    // Define unique background colors for each player.
-    const colorPlayer1 = "#FF9A76";  // Bottom player's color
-    const colorPlayer2 = "#76C7FF";  // Top player's color
-    
+    let startingPlayer = 1; // Default starting player.
+
+    // Unique background colors for each player.
+    const colorPlayer1 = "#FF9A76";  // Bottom player's color.
+    const colorPlayer2 = "#76C7FF";  // Top player's color.
+
+    // Element references.
+    const container = document.getElementById("container");
     const display1 = document.getElementById("player1");
     const display2 = document.getElementById("player2");
     const pauseButton = document.getElementById("pauseButton");
     const resetButton = document.getElementById("resetButton");
     const swapGraphic = document.getElementById("swapGraphic");
-    const oppTime1 = document.getElementById("oppTime1"); // In player1 area, shows player2's time.
-    const oppTime2 = document.getElementById("oppTime2"); // In player2 area, shows player1's time.
-    
+    const oppTime1 = document.getElementById("oppTime1");
+    const oppTime2 = document.getElementById("oppTime2");
+    const startSelector = document.getElementById("startSelector");
+    const settingsPanel = document.getElementById("settingsPanel");
+    const player1NameInput = document.getElementById("player1Name");
+    const player2NameInput = document.getElementById("player2Name");
+    const player1ScoreInput = document.getElementById("player1Score");
+    const player2ScoreInput = document.getElementById("player2Score");
+    const startPlayer1Button = document.getElementById("startPlayer1");
+    const startPlayer2Button = document.getElementById("startPlayer2");
+
     // Format seconds into mm:ss.
     function formatTime(seconds) {
       const m = Math.floor(seconds / 60);
@@ -130,31 +230,32 @@
       return (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
     }
     
-    // Returns text color based on time thresholds.
+    // Return text color based on time thresholds.
     function getColor(time) {
-      if (time > 240) return "green";       // above 4 minutes
-      else if (time < 30) return "red";       // below 30 seconds
-      else if (time < 60) return "orange";    // below 1 minute
-      else return "#fff";                    // default white
+      if (time > 240) return "green";       // above 4 minutes.
+      else if (time < 30) return "red";       // below 30 seconds.
+      else if (time < 60) return "orange";    // below 1 minute.
+      else return "#fff";                    // default white.
     }
     
-    // Update both displays, opponent overlays, and the background.
+    // Update timer displays, opponent overlays, and background gradient.
     function updateDisplay() {
+      // Update main timer text.
       display1.firstChild.textContent = formatTime(time1);
       display2.firstChild.textContent = formatTime(time2);
       display1.style.color = getColor(time1);
       display2.style.color = getColor(time2);
       
-      // Update opponent overlays:
+      // Update opponent time overlays.
       oppTime1.textContent = formatTime(time2);
       oppTime2.textContent = formatTime(time1);
       
-      // Calculate ratio for background gradient.
+      // Update the background gradient based on player2's time.
       const ratio = (time2 / totalTime) * 100;
       document.body.style.background = `linear-gradient(to bottom, ${colorPlayer2} 0%, ${colorPlayer2} ${ratio}%, ${colorPlayer1} ${ratio}%, ${colorPlayer1} 100%)`;
     }
     
-    // 30-second beep using the Web Audio API.
+    // 30-second beep.
     function beep() {
       const context = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = context.createOscillator();
@@ -165,7 +266,7 @@
       oscillator.stop(context.currentTime + 0.1);
     }
     
-    // Swap sound: a bell-like "ding" effect.
+    // Swap sound: bell-like "ding" effect.
     function playSwapSound() {
       const context = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = context.createOscillator();
@@ -189,9 +290,9 @@
       }, { once: true });
     }
     
-    // Tick function: transfers time between players and triggers 30-sec beeps.
+    // Tick function: update timers and trigger 30-sec beeps.
     function tick() {
-      const delta = 0.1; // update interval in seconds.
+      const delta = 0.1; // seconds.
       elapsedTime += delta;
       if (elapsedTime >= nextBeepTime) {
         beep();
@@ -220,12 +321,12 @@
       updateDisplay();
     }
     
-    // Tapping on the container toggles (or starts) the timer.
-    document.getElementById("container").addEventListener("click", function() {
-      if (paused) return; // ignore taps when paused.
+    // Container tap toggles (or starts) the timer.
+    container.addEventListener("click", function() {
+      if (paused) return;
       if (activePlayer === null) {
-        // Start with player 1.
-        activePlayer = 1;
+        // Start with the chosen starting player.
+        activePlayer = startingPlayer;
         interval = setInterval(tick, 100);
       } else {
         // Swap active player.
@@ -235,15 +336,18 @@
       }
     });
     
-    // Pause/Resume button event.
+    // Pause/Resume button.
     pauseButton.addEventListener("click", function(e) {
-      e.stopPropagation(); // Prevent triggering the container tap.
+      e.stopPropagation();
       if (!paused) {
         paused = true;
         clearInterval(interval);
         interval = null;
         pauseButton.textContent = "Resume";
         resetButton.style.display = "block";
+        // Show settings panel and starting player selector.
+        settingsPanel.style.display = "block";
+        startSelector.style.display = "block";
       } else {
         paused = false;
         if (activePlayer !== null) {
@@ -251,25 +355,53 @@
         }
         pauseButton.textContent = "Pause";
         resetButton.style.display = "none";
+        settingsPanel.style.display = "none";
+        startSelector.style.display = "none";
       }
     });
     
-    // Reset button event: resets timer state.
+    // Reset button: resets game state and shows settings.
     resetButton.addEventListener("click", function(e) {
       e.stopPropagation();
       clearInterval(interval);
       interval = null;
-      paused = false;
+      paused = true;
       activePlayer = null;
       time1 = 180;
       time2 = 180;
       elapsedTime = 0;
       nextBeepTime = 30;
-      pauseButton.textContent = "Pause";
-      resetButton.style.display = "none";
+      pauseButton.textContent = "Resume";
+      resetButton.style.display = "block";
       updateDisplay();
+      // Show settings panel and starting player selector.
+      settingsPanel.style.display = "block";
+      startSelector.style.display = "block";
     });
     
+    // Starting player selector events.
+    startPlayer1Button.addEventListener("click", function(e) {
+      startingPlayer = 1;
+      startPlayer1Button.style.fontWeight = "bold";
+      startPlayer2Button.style.fontWeight = "normal";
+    });
+    startPlayer2Button.addEventListener("click", function(e) {
+      startingPlayer = 2;
+      startPlayer2Button.style.fontWeight = "bold";
+      startPlayer1Button.style.fontWeight = "normal";
+    });
+    // Set default selection style.
+    startPlayer1Button.style.fontWeight = "bold";
+    
+    // Save player names in cookies when changed.
+    player1NameInput.addEventListener("change", function() {
+      setCookie("player1Name", player1NameInput.value, 30);
+    });
+    player2NameInput.addEventListener("change", function() {
+      setCookie("player2Name", player2NameInput.value, 30);
+    });
+    
+    // Initial display update.
     updateDisplay();
   </script>
 </body>
